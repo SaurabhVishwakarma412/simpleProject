@@ -6,7 +6,7 @@ pipeline {
 
         DOCKERHUB_USER = 'saurabhkv'
 
-        IMAGE_NAME = 'static-html-demo'
+        IMAGE_NAME = 'simpleproject'
     }
 
     stages {
