@@ -1,17 +1,16 @@
-
 pipeline {
 
     agent any
+
     environment {
-        DOCKERHUB_USER = 'YOUR_DOCKERHUB_USERNAME'
+
+        DOCKERHUB_USER = 'saurabhkv'
+
         IMAGE_NAME = 'static-html-demo'
-        EC2_HOST = 'YOUR_EC2_PUBLIC_IP'
-        EC2_USER = 'ubuntu'
-        CONTAINER_NAME = 'static-html-demo'
     }
 
     stages {
-        // Stage 1: Download source code
+
         stage('Checkout') {
 
             steps {
@@ -21,20 +20,25 @@ pipeline {
             }
         }
 
-        // Stage 2: Build Docker image
+        // Stage 2: Build Docker Image
         stage('Build Docker Image') {
 
             steps {
 
                 sh '''
-                    docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER .
+                    docker build \
+                    -t $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER .
+
+                    docker tag \
+                    $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER \
+                    $DOCKERHUB_USER/$IMAGE_NAME:latest
                 '''
 
             }
         }
 
-        // Stage 3: Push image to Docker Hub
-        stage('Push to Docker Hub') {
+        // Stage 3: Login to Docker Hub
+        stage('Docker Hub Login') {
 
             steps {
 
@@ -49,61 +53,41 @@ pipeline {
                     sh '''
                         echo "$DH_TOKEN" | docker login \
                         -u "$DH_USER" --password-stdin
-
-                        docker push \
-                        $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
-
-                        docker logout
                     '''
 
                 }
             }
         }
 
-        // Stage 4: Deploy on AWS EC2
-        stage('Deploy to AWS EC2') {
+        // Stage 4: Push Image to Docker Hub
+        stage('Push to Docker Hub') {
 
             steps {
 
-                withCredentials([
-                    sshUserPrivateKey(
-                        credentialsId: 'ec2-ssh-key',
-                        keyFileVariable: 'SSH_KEY'
-                    )
-                ]) {
+                sh '''
+                    docker push \
+                    $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
 
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no \
-                        -i "$SSH_KEY" \
-                        "$EC2_USER@$EC2_HOST" "
+                    docker push \
+                    $DOCKERHUB_USER/$IMAGE_NAME:latest
+                '''
 
-                            docker pull \
-                            $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER &&
-
-                            (docker rm -f $CONTAINER_NAME 2>/dev/null || true) &&
-
-                            docker run -d \
-                            --name $CONTAINER_NAME \
-                            --restart unless-stopped \
-                            -p 80:80 \
-                            $DOCKERHUB_USER/$IMAGE_NAME:$BUILD_NUMBER
-
-                        "
-                    '''
-
-                }
             }
         }
     }
 
     post {
 
+        always {
+            sh 'docker logout || true'
+        }
+
         success {
-            echo 'Website deployed successfully!'
+            echo 'Docker image successfully pushed to Docker Hub!'
         }
 
         failure {
-            echo 'Deployment failed. Check Jenkins logs.'
+            echo 'Pipeline failed. Check Jenkins console output.'
         }
 
     }
